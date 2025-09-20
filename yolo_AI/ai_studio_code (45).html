@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Lot Annotation & Detection</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 1400px; margin: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1a252f; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        canvas { border: 1px solid #ccc; cursor: crosshair; max-width: 100%; height: auto; }
+        .controls { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button.secondary { background-color: #6c757d; }
+        button.secondary:hover { background-color: #545b62; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        input[type="file"], input[type="text"], select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .status { margin-top: 15px; font-weight: bold; padding: 10px; border-radius: 5px; }
+        .status.success { background-color: #d4edda; color: #155724; }
+        .status.error { background-color: #f8d7da; color: #721c24; }
+        #detectionResult { margin-top: 20px; max-width: 100%; border: 1px solid #ccc; }
+        .instructions { font-size: 0.9em; color: #555; background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+<h1>Parking Lot Management</h1>
+
+<div class="container">
+    <!-- ANNOTATION SECTION -->
+    <div class="card">
+        <h2>1. Annotate a New Place</h2>
+        <div class="instructions">
+            <p><b>Step 1:</b> Upload an image or the first frame of a video for your parking lot.</p>
+            <p><b>Step 2:</b> Left-click on the image to add points for a parking slot polygon.</p>
+            <p><b>Step 3:</b> Click 'Save Slot' to finalize the current polygon.</p>
+            <p><b>Step 4:</b> Repeat for all slots, then give your place a name and click 'Submit Annotations'.</p>
+        </div>
+        <input type="file" id="imageUpload" accept="image/*,video/*">
+        <canvas id="annotationCanvas"></canvas>
+        <div class="controls">
+            <input type="text" id="locationName" placeholder="Enter Place Name (e.g., 'main_lot')">
+            <button id="saveSlotBtn">Save Slot</button>
+            <button id="resetCurrentBtn" class="secondary">Reset Current</button>
+            <button id="submitAnnotationsBtn" disabled>Submit Annotations</button>
+        </div>
+        <div id="annotationStatus" class="status" style="display:none;"></div>
+    </div>
+
+    <!-- DETECTION SECTION -->
+    <div class="card">
+        <h2>2. Detect Parking Occupancy</h2>
+        <div class="instructions">
+            <p><b>Step 1:</b> Select a previously annotated place.</p>
+            <p><b>Step 2:</b> Upload an image or video for detection.</p>
+            <p><b>Step 3:</b> Click 'Start Detection' to see the results.</p>
+        </div>
+        <div class="controls">
+            <label for="locationSelect">Select Place:</label>
+            <select id="locationSelect"></select>
+            <button id="refreshLocationsBtn" class="secondary">Refresh List</button>
+        </div>
+        <div class="controls">
+            <label for="detectionUpload">Upload Image/Video for Detection:</label>
+            <input type="file" id="detectionUpload" accept="image/*,video/*">
+        </div>
+        <div class="controls">
+            <button id="detectBtn" disabled>Start Detection</button>
+        </div>
+        <div id="detectionStatus" class="status" style="display:none;"></div>
+        <img id="detectionResult" src="" alt="Detection Result" style="display:none;">
+    </div>
+</div>
+
+<script>
+    const API_URL = "http://127.0.0.1:8000";
+
+    // --- ANNOTATION LOGIC ---
+    const canvas = document.getElementById('annotationCanvas');
+    const ctx = canvas.getContext('2d');
+    const imageUpload = document.getElementById('imageUpload');
+    const saveSlotBtn = document.getElementById('saveSlotBtn');
+    const resetCurrentBtn = document.getElementById('resetCurrentBtn');
+    const submitAnnotationsBtn = document.getElementById('submitAnnotationsBtn');
+    const locationNameInput = document.getElementById('locationName');
+    const annotationStatus = document.getElementById('annotationStatus');
+
+    let backgroundImage = null;
+    let currentPoints = [];
+    let allSlots = [];
+
+    imageUpload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        allSlots = [];
+        currentPoints = [];
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            backgroundImage = new Image();
+            backgroundImage.onload = () => {
+                canvas.width = backgroundImage.width;
+                canvas.height = backgroundImage.height;
+                drawCanvas();
+            };
+            backgroundImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function drawCanvas() {
+        if (!backgroundImage) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(backgroundImage, 0, 0);
+
+        // Draw all saved slots
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        allSlots.forEach(slot => {
+            ctx.beginPath();
+            ctx.moveTo(slot[0][0], slot[0][1]);
+            for (let i = 1; i < slot.length; i++) {
+                ctx.lineTo(slot[i][0], slot[i][1]);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        });
+
+        // Draw current points for the new slot
+        ctx.fillStyle = '#ff0000';
+        ctx.strokeStyle = '#ff0000';
+        currentPoints.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p[0], p[1], 4, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        if (currentPoints.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(currentPoints[0][0], currentPoints[0][1]);
+            for (let i = 1; i < currentPoints.length; i++) {
+                ctx.lineTo(currentPoints[i][0], currentPoints[i][1]);
+            }
+            ctx.stroke();
+        }
+    }
+    
+    canvas.addEventListener('click', (e) => {
+        if (!backgroundImage) {
+            alert("Please upload an image first.");
+            return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        currentPoints.push([Math.round(x), Math.round(y)]);
+        drawCanvas();
+    });
+
+    saveSlotBtn.addEventListener('click', () => {
+        if (currentPoints.length < 3) {
+            alert("Please add at least 3 points to form a polygon.");
+            return;
+        }
+        allSlots.push([...currentPoints]);
+        currentPoints = [];
+        drawCanvas();
+        submitAnnotationsBtn.disabled = !(allSlots.length > 0 && locationNameInput.value.trim() !== "");
+    });
+
+    resetCurrentBtn.addEventListener('click', () => {
+        currentPoints = [];
+        drawCanvas();
+    });
+    
+    locationNameInput.addEventListener('keyup', () => {
+        submitAnnotationsBtn.disabled = !(allSlots.length > 0 && locationNameInput.value.trim() !== "");
+    });
+
+    submitAnnotationsBtn.addEventListener('click', async () => {
+        const locationName = locationNameInput.value.trim();
+        if (!locationName || allSlots.length === 0) {
+            alert("Please provide a location name and at least one slot.");
+            return;
+        }
+        
+        const payload = {
+            location_name: locationName,
+            slots: allSlots
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/api/annotate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || 'Failed to submit annotations');
+            
+            annotationStatus.textContent = result.message;
+            annotationStatus.className = 'status success';
+            annotationStatus.style.display = 'block';
+            await refreshLocations(); // Refresh the list in the detection section
+        } catch (error) {
+            annotationStatus.textContent = `Error: ${error.message}`;
+            annotationStatus.className = 'status error';
+            annotationStatus.style.display = 'block';
+        }
+    });
+
+    // --- DETECTION LOGIC ---
+    const locationSelect = document.getElementById('locationSelect');
+    const refreshLocationsBtn = document.getElementById('refreshLocationsBtn');
+    const detectionUpload = document.getElementById('detectionUpload');
+    const detectBtn = document.getElementById('detectBtn');
+    const detectionStatus = document.getElementById('detectionStatus');
+    const detectionResultImg = document.getElementById('detectionResult');
+
+    async function refreshLocations() {
+        try {
+            const response = await fetch(`${API_URL}/api/locations`);
+            if (!response.ok) throw new Error('Failed to fetch locations');
+            const locations = await response.json();
+            
+            locationSelect.innerHTML = '<option value="">-- Select a Place --</option>';
+            locations.forEach(loc => {
+                const option = document.createElement('option');
+                option.value = loc;
+                option.textContent = loc;
+                locationSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error(error);
+            alert("Could not connect to the backend to get locations. Is the server running?");
+        }
+    }
+    
+    function checkDetectionButtonState() {
+        detectBtn.disabled = !(locationSelect.value && detectionUpload.files.length > 0);
+    }
+    locationSelect.addEventListener('change', checkDetectionButtonState);
+    detectionUpload.addEventListener('change', checkDetectionButtonState);
+    
+    refreshLocationsBtn.addEventListener('click', refreshLocations);
+
+    detectBtn.addEventListener('click', async () => {
+        const locationName = locationSelect.value;
+        const file = detectionUpload.files[0];
+
+        if (!locationName || !file) {
+            alert("Please select a location and a file for detection.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('location_name', locationName);
+        formData.append('file', file);
+        
+        detectionStatus.textContent = 'Processing... This may take a moment.';
+        detectionStatus.className = 'status';
+        detectionStatus.style.display = 'block';
+        detectionResultImg.style.display = 'none';
+
+        try {
+            const response = await fetch(`${API_URL}/api/detect`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.detail || 'Detection failed on the server.');
+            }
+            
+            const imageBlob = await response.blob();
+            const imageUrl = URL.createObjectURL(imageBlob);
+            
+            detectionResultImg.src = imageUrl;
+            detectionResultImg.style.display = 'block';
+            detectionStatus.style.display = 'none';
+
+        } catch (error) {
+            detectionStatus.textContent = `Error: ${error.message}`;
+            detectionStatus.className = 'status error';
+        }
+    });
+
+    // Initial load
+    window.addEventListener('load', refreshLocations);
+</script>
+
+</body>
+</html>
