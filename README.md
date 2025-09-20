@@ -12,10 +12,9 @@ Repos:
 
 ---
 
-## 📸 Screenshots
-
+## 📸 Screenshots (just 4 or 5 screenshots)
 ### Operator Web
-| Dashboard | Zones |
+| Dashboard | Alerts |
 | --- | --- |
 | ![Dashboard](docs/img/operator-dashboard.png) | ![Zones](docs/img/operator-zones.png) |
 
