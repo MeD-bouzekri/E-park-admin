@@ -22,7 +22,7 @@ Repos:
 ### Driver App
 | Map/Home | Reservation |
 | --- | --- |
-| ![Mobile Home](docs/img/mobile-home.png) | ![Mobile Reserve](docs/img/mobile-reserve.png) |
+| ![Mobile Home](docs/img/mobile-home.jpg) | ![Mobile Reserve](docs/img/mobile-reserve.jpg) |
 
 ### Vision (optional)
 ![Vision OCR](docs/img/vision-ocr.png)
