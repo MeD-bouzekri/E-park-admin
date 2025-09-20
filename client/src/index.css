@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+.card{ @apply bg-dashboard-gray text-dashboard-blue rounded-2xl shadow-card; }
+.badge{ @apply inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium; }
+.btn{ @apply inline-flex items-center justify-center rounded-xl border border-dashboard-border bg-dashboard-white px-4 py-2 text-sm font-medium text-dashboard-blue hover:bg-dashboard-gray; }
+.input{ @apply w-full rounded-xl border border-dashboard-border bg-dashboard-white/90 px-4 py-2 text-dashboard-blue placeholder-dashboard-blue/50; }
+.sidebar-link{ @apply block rounded-xl px-3 py-2 text-dashboard-blue hover:bg-dashboard-lightgreen/50; }
+.sidebar-link.active{ @apply bg-dashboard-lightgreen text-dashboard-green; }

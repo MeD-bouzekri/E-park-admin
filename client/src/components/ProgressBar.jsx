@@ -1,0 +1,1 @@
+export default function ProgressBar({ value=0 }){ return (<div className="h-2.5 w-full rounded-full bg-slate-100"><div className="h-2.5 rounded-full bg-emerald-500" style={{width:`${value}%`}}/></div>); }
